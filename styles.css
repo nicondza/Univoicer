@@ -622,6 +622,19 @@
       z-index: 4;
     }
 
+    .universe-node--favorite-copy {
+      --w: 136px;
+      --h: 156px;
+      --orb-size: 116px;
+      --title-size: 0.86rem;
+      z-index: 6;
+    }
+
+    .universe-node--favorite-copy .orb-container {
+      border-color: rgba(255, 225, 132, 0.95);
+      box-shadow: 0 0 34px rgba(255, 209, 102, 0.68), inset 0 0 20px rgba(255, 200, 108, 0.24);
+    }
+
     .universe-node.is-dragging {
       z-index: 12;
     }
