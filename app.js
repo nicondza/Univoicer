@@ -54,6 +54,7 @@
       indicePreviewTimer: null,
       indicePreviewCharacter: '',
       indicePreviewAnchor: null,
+      indiceCollapsedRarities: new Set(),
       showCharacterInlineEdit: false,
       showCharacterInlineDelete: false,
       expandedUniverses: new Set(),
@@ -4429,8 +4430,18 @@
               ? rarityRenderOrder
                 .filter((rarity) => groupedIndexItems.has(rarity))
                 .map((rarity) => `
-                  <p class="indice-group-divider">${rarityGroupLabels[rarity] || rarity}</p>
-                  ${groupedIndexItems.get(rarity).map(item => renderCharacterGalleryCard(item, { locked: !item.unlocked })).join('')}
+                  <button
+                    type="button"
+                    class="indice-group-divider indice-group-toggle"
+                    data-toggle-rarity="${rarity}"
+                    aria-expanded="${state.indiceCollapsedRarities.has(rarity) ? 'false' : 'true'}"
+                  >
+                    <span>${rarityGroupLabels[rarity] || rarity}</span>
+                    <span class="indice-group-toggle-icon">${state.indiceCollapsedRarities.has(rarity) ? '▸' : '▾'}</span>
+                  </button>
+                  ${state.indiceCollapsedRarities.has(rarity)
+                    ? ''
+                    : groupedIndexItems.get(rarity).map(item => renderCharacterGalleryCard(item, { locked: !item.unlocked })).join('')}
                 `).join('')
               : '<p class="muted">No hay personajes cargados.</p>'}
           </section>
@@ -4452,6 +4463,18 @@
         state.showAddCharacterForm = !state.showAddCharacterForm;
         state.draftCharacterFeedback = '';
         renderIndiceView();
+      });
+      viewIndice.querySelectorAll('[data-toggle-rarity]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const rarity = btn.dataset.toggleRarity;
+          if (!rarity) return;
+          if (state.indiceCollapsedRarities.has(rarity)) {
+            state.indiceCollapsedRarities.delete(rarity);
+          } else {
+            state.indiceCollapsedRarities.add(rarity);
+          }
+          renderIndiceView();
+        });
       });
       document.getElementById('addCharacterForm')?.addEventListener('submit', (event) => {
         event.preventDefault();
