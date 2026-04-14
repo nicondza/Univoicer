@@ -600,10 +600,13 @@
       if (!rawPlaylist || typeof rawPlaylist !== 'object') return null;
       const name = String(rawPlaylist.name || '').trim();
       const playlistId = String(rawPlaylist.id || '').trim();
+      const source = String(rawPlaylist.source || '').trim();
+      const isExplicitCustom = source === 'custom';
+      const isLegacyCustomId = playlistId.startsWith('custom:');
       const videoIds = Array.isArray(rawPlaylist.videoIds)
         ? [...new Set(rawPlaylist.videoIds.map((id) => String(id || '').trim()).filter(Boolean))]
         : [];
-      if (!name || !playlistId || !videoIds.length) return null;
+      if (!name || !playlistId || !videoIds.length || (!isExplicitCustom && !isLegacyCustomId)) return null;
       return {
         id: playlistId,
         name,
