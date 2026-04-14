@@ -36,7 +36,8 @@
         queue: [],
         position: 0,
         isPlaying: false,
-        shuffleEnabled: false
+        shuffleEnabled: false,
+        createModalOpen: false
       },
       universeNodes: [],
       universeMemberships: {},
@@ -63,6 +64,7 @@
     const UNIVERSES_STORAGE_KEY = 'universes_map_v1';
     const VIDEOS_STORAGE_KEY = 'videos_collection_v1';
     const COLLECTION_MODEL_STORAGE_KEY = 'collection_model_v1';
+    const MARATHON_STORAGE_KEY = 'marathon_state_v1';
     const BLOCKED_CHARACTERS_STORAGE_KEY = 'blocked_characters_by_actor_v1';
     const UNIVERSE_MEMBERSHIPS_STORAGE_KEY = 'universe_memberships_v1';
     const CLOUD_STORAGE_PATH = 'univoicerData/main';
@@ -587,6 +589,54 @@
         reader.onerror = () => reject(new Error('No fue posible leer la imagen local.'));
         reader.readAsDataURL(file);
       });
+    }
+
+    function normalizeCustomMarathonPlaylist(rawPlaylist) {
+      if (!rawPlaylist || typeof rawPlaylist !== 'object') return null;
+      const name = String(rawPlaylist.name || '').trim();
+      const playlistId = String(rawPlaylist.id || '').trim();
+      const videoIds = Array.isArray(rawPlaylist.videoIds)
+        ? [...new Set(rawPlaylist.videoIds.map((id) => String(id || '').trim()).filter(Boolean))]
+        : [];
+      if (!name || !playlistId || !videoIds.length) return null;
+      return {
+        id: playlistId,
+        name,
+        cover: String(rawPlaylist.cover || '').trim(),
+        source: 'custom',
+        videoIds
+      };
+    }
+
+    function getCustomMarathonPlaylists() {
+      return (state.marathon.playlists || [])
+        .map(normalizeCustomMarathonPlaylist)
+        .filter(Boolean);
+    }
+
+    function saveMarathonState() {
+      const payload = {
+        activePlaylistId: String(state.marathon.activePlaylistId || 'auto'),
+        shuffleEnabled: Boolean(state.marathon.shuffleEnabled),
+        customPlaylists: getCustomMarathonPlaylists()
+      };
+      localStorage.setItem(MARATHON_STORAGE_KEY, JSON.stringify(payload));
+    }
+
+    function loadMarathonStateFromStorage() {
+      try {
+        const raw = localStorage.getItem(MARATHON_STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        const customPlaylists = Array.isArray(parsed?.customPlaylists)
+          ? parsed.customPlaylists.map(normalizeCustomMarathonPlaylist).filter(Boolean)
+          : [];
+        state.marathon.playlists = customPlaylists;
+        state.marathon.activePlaylistId = String(parsed?.activePlaylistId || state.marathon.activePlaylistId || 'auto');
+        state.marathon.shuffleEnabled = Boolean(parsed?.shuffleEnabled);
+      } catch (err) {
+        console.warn('No se pudo leer el estado de maratón desde almacenamiento local.', err);
+      }
     }
 
     function saveUniverseNodes() {
@@ -1159,13 +1209,15 @@
       
       // Aseguramos que el estado de maratón exista antes de tocarlo
       if (!state.marathon.playlists) state.marathon.playlists = [];
-      state.marathon.playlists = [AUTO_MARATHON_PLAYLIST];
+      const customPlaylists = getCustomMarathonPlaylists();
+      state.marathon.playlists = [AUTO_MARATHON_PLAYLIST, ...customPlaylists];
       
       // Unificamos el nombre a activePlaylistId (que es el que usa el reproductor)
       const playlistExists = state.marathon.playlists.some((playlist) => playlist.id === state.marathon.activePlaylistId);
       if (!playlistExists) {
         state.marathon.activePlaylistId = AUTO_MARATHON_PLAYLIST.id;
       }
+      saveMarathonState();
       
       return AUTO_MARATHON_PLAYLIST;
     }
@@ -4433,20 +4485,30 @@
       const automaticQueue = getFilteredUniverseVideos();
       const byUniverse = groupByUniverse();
       const universePlaylists = Object.entries(byUniverse)
-        .filter(([, data]) => Array.isArray(data?.videos) && data.videos.length)
         .map(([key, data]) => ({
           id: `universe:${key}`,
           name: data.name || key || 'Universo',
-          videos: data.videos.filter((video) => hasGreetingVideo(video))
+          videos: VIDEOS.filter((video) => (
+            hasGreetingVideo(video) &&
+            getVideoUniverses(video).some((name) => normalizeUniverseName(name) === key)
+          ))
         }))
         .filter((playlist) => playlist.videos.length);
+      const customPlaylists = getCustomMarathonPlaylists().map((playlist) => ({
+        ...playlist,
+        videos: playlist.videoIds
+          .map((videoId) => VIDEOS.find((video) => String(video.id) === videoId))
+          .filter((video) => video && hasGreetingVideo(video))
+      })).filter((playlist) => playlist.videos.length);
       marathon.playlists = [
         {
           id: 'auto',
           name: 'Automática',
+          source: 'auto',
           videos: automaticQueue.filter((video) => hasGreetingVideo(video))
         },
-        ...universePlaylists
+        ...universePlaylists,
+        ...customPlaylists
       ];
       if (!marathon.playlists.some((playlist) => playlist.id === marathon.activePlaylistId)) {
         marathon.activePlaylistId = marathon.playlists[0]?.id || 'auto';
@@ -4461,6 +4523,73 @@
         marathon.position = 0;
         marathon.isPlaying = false;
       }
+      saveMarathonState();
+    }
+
+    function renderCustomMarathonPlaylistsList() {
+      const customPlaylists = state.marathon.playlists.filter((playlist) => playlist.source === 'custom');
+      if (!customPlaylists.length) {
+        return '<p class="marathon-empty">Todavía no creaste playlists personalizadas.</p>';
+      }
+      return `
+        <ul class="marathon-custom-list">
+          ${customPlaylists.map((playlist) => `
+            <li>
+              <button
+                type="button"
+                class="marathon-custom-card ${playlist.id === state.marathon.activePlaylistId ? 'active' : ''}"
+                data-custom-playlist-id="${playlist.id}">
+                ${playlist.cover ? `<img src="${escapeHtml(playlist.cover)}" alt="Portada de ${escapeHtml(playlist.name)}" loading="lazy">` : '<span class="marathon-custom-placeholder">Sin portada</span>'}
+                <strong>${escapeHtml(playlist.name)}</strong>
+              </button>
+            </li>
+          `).join('')}
+        </ul>
+      `;
+    }
+
+    function openMarathonCreateModal() {
+      state.marathon.createModalOpen = true;
+      renderMaratonView();
+    }
+
+    function closeMarathonCreateModal() {
+      state.marathon.createModalOpen = false;
+      renderMaratonView();
+    }
+
+    async function submitMarathonCreateForm(form) {
+      const formData = new FormData(form);
+      const name = String(formData.get('playlistName') || '').trim();
+      if (!name) throw new Error('El nombre de la playlist es obligatorio.');
+      const selectedVideos = formData.getAll('playlistVideos').map((id) => String(id || '').trim()).filter(Boolean);
+      if (!selectedVideos.length) throw new Error('Seleccioná al menos un video.');
+      const coverMode = String(formData.get('coverMode') || 'url');
+      const coverUrl = String(formData.get('playlistCoverUrl') || '').trim();
+      const coverFile = formData.get('playlistCoverFile');
+      let cover = '';
+      if (coverMode === 'file' && coverFile instanceof File && coverFile.size > 0) {
+        if (!coverFile.type.startsWith('image/')) throw new Error('El archivo seleccionado no es una imagen.');
+        if (coverFile.size > MAX_LOCAL_IMAGE_BYTES) throw new Error('La imagen supera el límite de 2MB.');
+        cover = await fileToDataUrl(coverFile);
+      } else if (coverMode === 'url' && coverUrl) {
+        cover = validateCoverUrl(coverUrl);
+      }
+
+      const playlist = {
+        id: `custom:${Date.now()}`,
+        name,
+        videoIds: [...new Set(selectedVideos)],
+        cover,
+        source: 'custom'
+      };
+      state.marathon.playlists = [...state.marathon.playlists, playlist];
+      state.marathon.activePlaylistId = playlist.id;
+      state.marathon.position = 0;
+      state.marathon.isPlaying = false;
+      state.marathon.createModalOpen = false;
+      saveMarathonState();
+      renderMaratonView();
     }
 
     function renderMaratonView() {
@@ -4475,6 +4604,7 @@
       ensureMarathonState();
       
       const marathon = state.marathon;
+      const selectableVideos = VIDEOS.filter((video) => hasGreetingVideo(video));
       const playlistOptions = marathon.playlists.map((playlist) => (
         `<option value="${playlist.id}" ${playlist.id === marathon.activePlaylistId ? 'selected' : ''}>${playlist.name}</option>`
       )).join('');
@@ -4502,6 +4632,10 @@
                 <button id="marathonNextBtn" class="neon-btn" type="button">Siguiente</button>
                 <button id="marathonShuffleBtn" class="neon-btn" type="button">Reproducir aleatoriamente ${marathon.shuffleEnabled ? '✓' : ''}</button>
               </div>
+              <section class="marathon-custom-section">
+                <p class="marathon-playlist-label">Playlists personalizadas</p>
+                ${renderCustomMarathonPlaylistsList()}
+              </section>
             </div>
             <aside class="marathon-side">
               <p class="marathon-playlist-label">Videos de playlist</p>
@@ -4517,12 +4651,56 @@
               </ul>
             </aside>
           </div>
+          ${marathon.createModalOpen ? `
+            <div class="detail-modal">
+              <div class="detail-content marathon-create-modal">
+                <h3>Crear playlist personalizada</h3>
+                <form id="marathonCreateForm" class="marathon-create-form">
+                  <label>
+                    Nombre de playlist *
+                    <input type="text" name="playlistName" required maxlength="80" placeholder="Ej: Favoritos de Sonic">
+                  </label>
+                  <fieldset>
+                    <legend>Videos</legend>
+                    <div class="marathon-video-picker">
+                      ${selectableVideos.map((video) => `
+                        <label>
+                          <input type="checkbox" name="playlistVideos" value="${escapeHtml(video.id)}">
+                          <span>${escapeHtml(video.titulo || video.personaje || 'Video')}</span>
+                          <small>${escapeHtml(video.personaje || 'Sin personaje')} · ${escapeHtml(video.actor_de_doblaje || 'Sin actor')}</small>
+                        </label>
+                      `).join('') || '<p class="muted">No hay videos disponibles para agregar.</p>'}
+                    </div>
+                  </fieldset>
+                  <fieldset>
+                    <legend>Portada (opcional)</legend>
+                    <div class="cover-mode" role="group" aria-label="Selector de portada">
+                      <button type="button" data-marathon-cover-mode="url" class="active">URL</button>
+                      <button type="button" data-marathon-cover-mode="file">Archivo</button>
+                    </div>
+                    <input type="hidden" name="coverMode" value="url" id="marathonCoverModeInput">
+                    <div data-marathon-cover-input="url">
+                      <input type="url" name="playlistCoverUrl" placeholder="https://...">
+                    </div>
+                    <div data-marathon-cover-input="file" hidden>
+                      <input type="file" name="playlistCoverFile" accept="image/*">
+                    </div>
+                  </fieldset>
+                  <p id="marathonCreateFeedback" class="muted"></p>
+                  <div class="actions">
+                    <button type="button" id="cancelMarathonCreateBtn" class="neon-btn">Cancelar</button>
+                    <button type="submit" class="neon-btn toon-btn toon-btn--primary">Guardar</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          ` : ''}
         </section>
       `;
 
       // Listeners
       document.getElementById('addMarathonBtn')?.addEventListener('click', () => {
-        // Botón visual solicitado; sin lógica funcional por ahora.
+        openMarathonCreateModal();
       });
 
       document.getElementById('marathonPlaylistSelect')?.addEventListener('change', (event) => {
@@ -4558,12 +4736,51 @@
         renderMaratonView();
       });
 
+      viewMaraton.querySelectorAll('[data-custom-playlist-id]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const playlistId = button.dataset.customPlaylistId;
+          if (!playlistId) return;
+          state.marathon.activePlaylistId = playlistId;
+          state.marathon.position = 0;
+          renderMaratonView();
+        });
+      });
+
       viewMaraton.querySelectorAll('[data-marathon-index]').forEach((button) => {
         button.addEventListener('click', () => {
           const selectedIndex = Number(button.dataset.marathonIndex);
           if (!Number.isFinite(selectedIndex) || selectedIndex < 0 || selectedIndex >= state.marathon.queue.length) return;
           state.marathon.position = selectedIndex;
           loadMarathonVideoAtCurrentPosition();
+        });
+      });
+
+      document.getElementById('cancelMarathonCreateBtn')?.addEventListener('click', () => {
+        closeMarathonCreateModal();
+      });
+
+      const marathonCreateForm = document.getElementById('marathonCreateForm');
+      const marathonCreateFeedback = document.getElementById('marathonCreateFeedback');
+      marathonCreateForm?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!marathonCreateFeedback) return;
+        marathonCreateFeedback.textContent = '';
+        try {
+          await submitMarathonCreateForm(event.currentTarget);
+        } catch (err) {
+          marathonCreateFeedback.textContent = err.message || 'No se pudo crear la playlist.';
+        }
+      });
+
+      marathonCreateForm?.querySelectorAll('[data-marathon-cover-mode]').forEach((modeBtn) => {
+        modeBtn.addEventListener('click', () => {
+          const mode = modeBtn.dataset.marathonCoverMode || 'url';
+          marathonCreateForm.querySelectorAll('[data-marathon-cover-mode]').forEach(btn => btn.classList.toggle('active', btn === modeBtn));
+          marathonCreateForm.querySelectorAll('[data-marathon-cover-input]').forEach(group => {
+            group.hidden = group.dataset.marathonCoverInput !== mode;
+          });
+          const modeInput = marathonCreateForm.querySelector('#marathonCoverModeInput');
+          if (modeInput) modeInput.value = mode;
         });
       });
 
@@ -5243,6 +5460,7 @@
     syncFavoriteUniverseSetFromNodes();
     state.universeMemberships = loadUniverseMembershipsFromStorage();
     loadVideosFromStorage();
+    loadMarathonStateFromStorage();
     hydrateModelWithFallback();
     state.blockedCharactersByActor = loadBlockedCharactersFromStorage();
     sanitizeUniverseMembershipsAndPersist();
