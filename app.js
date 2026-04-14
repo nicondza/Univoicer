@@ -1967,8 +1967,9 @@
         const worldNodes = [];
         const worldLinks = [];
         const childUniverseIds = new Set(Object.keys(state.universeMemberships || {}));
-        const rootUniverseNodes = state.universeNodes.filter(node => !childUniverseIds.has(node.id));
-        const favoriteUniverseNodes = state.universeNodes.filter((node) => node.isFavorite);
+        const rootUniverseNodes = state.universeNodes.filter((node) => !childUniverseIds.has(node.id) || node.isFavorite === true);
+        const rootUniverseNodeIds = new Set(rootUniverseNodes.map((node) => node.id));
+        const favoriteUniverseNodes = state.universeNodes.filter((node) => node.isFavorite && !rootUniverseNodeIds.has(node.id));
         const absorptionEffect = state.mapAbsorptionEffect;
         const absorptionMarkup = absorptionEffect
           ? `
