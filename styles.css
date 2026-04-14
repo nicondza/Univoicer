@@ -3429,6 +3429,26 @@
       text-transform: uppercase;
       color: #cde8ff;
     }
+    .indice-group-toggle {
+      width: 100%;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      cursor: pointer;
+      transition: border-color .18s ease, background-color .18s ease;
+    }
+    .indice-group-toggle:hover {
+      border-color: rgba(130, 199, 255, .48);
+      background: rgba(16, 39, 74, .75);
+    }
+    .indice-group-toggle-icon {
+      font-size: .95rem;
+      color: #e0f1ff;
+      opacity: .95;
+      line-height: 1;
+    }
     @media (max-width: 780px) {
       .indice-filter-row {
         grid-template-columns: 1fr;
