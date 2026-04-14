@@ -4430,7 +4430,7 @@
 
     function ensureMarathonState() {
       const marathon = state.marathon;
-      const automaticQueue = getFilteredUniverseVideos();
+      const automaticQueue = VIDEOS.filter((video) => hasGreetingVideo(video));
       const byUniverse = groupByUniverse();
       const universePlaylists = Object.entries(byUniverse)
         .filter(([, data]) => Array.isArray(data?.videos) && data.videos.length)
@@ -4444,7 +4444,7 @@
         {
           id: 'auto',
           name: 'Automática',
-          videos: automaticQueue.filter((video) => hasGreetingVideo(video))
+          videos: [...automaticQueue]
         },
         ...universePlaylists
       ];
