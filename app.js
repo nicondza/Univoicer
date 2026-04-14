@@ -57,7 +57,8 @@
       showCharacterInlineDelete: false,
       expandedUniverses: new Set(),
       mapWorldFilter: 'universe',
-      mapAbsorptionEffect: null
+      mapAbsorptionEffect: null,
+      favoriteUniverses: new Set()
     };
     const UNIVERSES_STORAGE_KEY = 'universes_map_v1';
     const VIDEOS_STORAGE_KEY = 'videos_collection_v1';
@@ -593,6 +594,14 @@
       scheduleCloudSync();
     }
 
+    function syncFavoriteUniverseSetFromNodes() {
+      state.favoriteUniverses = new Set(
+        (state.universeNodes || [])
+          .filter((node) => node?.isFavorite)
+          .map((node) => node.name)
+      );
+    }
+
     function getUniverseParentId(nodeId) {
       const normalizedId = String(nodeId || '').trim();
       if (!normalizedId) return '';
@@ -890,7 +899,8 @@
           parentUniverseId: String(node.parentUniverseId || '').trim(),
           parentUniverseIds: Array.isArray(node.parentUniverseIds)
             ? [...new Set(node.parentUniverseIds.filter(Boolean).map((id) => String(id).trim()).filter(Boolean))]
-            : []
+            : [],
+          isFavorite: Boolean(node.isFavorite)
         }))
         .filter(node => node.name);
     }
@@ -1040,6 +1050,7 @@
           parentUniverseIds: mergedParents
         };
       });
+      syncFavoriteUniverseSetFromNodes();
       if (changed) saveUniverseMemberships();
     }
 
@@ -1095,15 +1106,15 @@
         }
 
         if (data.universeNodes) {
-        state.universeNodes = Object.entries(data.universeNodes).map(([id, val]) => {
-          const node = { id, ...val };
-          // Si en Firebase dice que es favorito, lo metemos al Set de favoritos de la app
-          if (node.isFavorite) {
-            state.favoriteUniverses.add(node.name);
-          }
-          return node;
-        });
-      }
+          state.universeNodes = normalizeUniverseNodes(
+            Object.entries(data.universeNodes).map(([id, val]) => ({ id, ...val }))
+          );
+          state.favoriteUniverses = new Set(
+            state.universeNodes
+              .filter((node) => node.isFavorite)
+              .map((node) => node.name)
+          );
+        }
         if (data.universeMemberships && typeof data.universeMemberships === 'object') {
           state.universeMemberships = normalizeUniverseMemberships(data.universeMemberships);
           localStorage.setItem(UNIVERSE_MEMBERSHIPS_STORAGE_KEY, JSON.stringify(state.universeMemberships));
@@ -1949,10 +1960,12 @@
       const renderMapWorldContent = () => {
         const universes = groupByUniverse();
         ensureUniverseNodes();
+        syncFavoriteUniverseSetFromNodes();
         const worldNodes = [];
         const worldLinks = [];
         const childUniverseIds = new Set(Object.keys(state.universeMemberships || {}));
         const rootUniverseNodes = state.universeNodes.filter(node => !childUniverseIds.has(node.id));
+        const favoriteUniverseNodes = state.universeNodes.filter((node) => node.isFavorite);
         const absorptionEffect = state.mapAbsorptionEffect;
         const absorptionMarkup = absorptionEffect
           ? `
@@ -2071,11 +2084,34 @@
           `;
         }).join('');
 
+        const favoriteCopiesMarkup = favoriteUniverseNodes.map((node, index) => {
+          const safeName = escapeHtml(node.name);
+          const copyX = 90 + ((index % 6) * 150);
+          const copyY = 90 + (Math.floor(index / 6) * 170);
+          return `
+            <button
+              class="universe-node universe-node--favorite-copy"
+              data-open="${safeName}"
+              title="Favorito: ${safeName}"
+              style="left:${copyX}px; top:${copyY}px;"
+            >
+              <div class="orb-container">
+                <img class="universe-cover" src="${getSafeUniverseCover(node.name, node.cover)}" alt="Favorito ${safeName}" loading="lazy">
+                <span class="cover-fallback">Sin portada</span>
+              </div>
+              <div class="node-info">
+                <h3>${safeName}</h3>
+              </div>
+            </button>
+          `;
+        }).join('');
+
         mapWorld.innerHTML = `
           <svg class="map-links-layer" id="mapLinksLayer" viewBox="0 0 ${state.mapCanvas.width} ${state.mapCanvas.height}" preserveAspectRatio="none" aria-hidden="true">
             ${worldLinks.join('')}
           </svg>
           ${absorptionMarkup}
+          ${favoriteCopiesMarkup}
           ${worldNodes.join('')}
           ${nodesMarkup}
         `;
@@ -2394,6 +2430,20 @@
             return;
           }
 
+          const favoriteCopyEl = event.target.closest('.universe-node--favorite-copy[data-open]');
+          if (favoriteCopyEl) {
+            event.preventDefault();
+            event.stopPropagation();
+            const universeName = favoriteCopyEl.dataset.open;
+            if (!universeName) return;
+            state.universe = universeName;
+            state.selectedVideoId = null;
+            state.showAddForm = false;
+            state.showEditUniverseForm = false;
+            changeView('universe');
+            return;
+          }
+
           const nodeEl = event.target.closest('.universe-node--universe');
           if (!nodeEl) return;
           if (nodeEl.dataset.dragMoved === '1') {
@@ -2622,7 +2672,7 @@
           </div>
           <div class="universe-controls" style="display: flex; flex-direction: column; gap: 10px; align-items: flex-end;">
             <button id="favUniverseBtn" class="neon-btn neon-action icon-only" title="Favorito" style="font-size: 1.5rem;">
-              ${state.favoriteUniverses && state.favoriteUniverses.has(state.universe) ? '⭐' : '☆'}
+              ${universeNode?.isFavorite ? '⭐' : '☆'}
             </button>
 
             <div style="display: flex; gap: 10px;">
@@ -3105,19 +3155,17 @@
         favBtn.onclick = (e) => {
           e.preventDefault();
           e.stopPropagation();
-          
-          // Verificación de seguridad para el Set
-          if (!state.favoriteUniverses) state.favoriteUniverses = new Set();
-          
+
           const currentUniverse = state.universe;
-          if (state.favoriteUniverses.has(currentUniverse)) {
-            state.favoriteUniverses.delete(currentUniverse);
-          } else {
-            state.favoriteUniverses.add(currentUniverse);
-          }
-          
-          // Forzamos el re-render para ver el cambio de emoji
+          const currentNode = getNodeByNormalizedUniverseName(currentUniverse);
+          if (!currentNode) return;
+
+          currentNode.isFavorite = !currentNode.isFavorite;
+          syncFavoriteUniverseSetFromNodes();
+          saveUniverseNodes();
+
           renderUniverseView();
+          renderMapView();
         };
       }
     }
@@ -5192,6 +5240,7 @@
     navMaraton.onclick = () => changeView('maraton');
 
     state.universeNodes = loadUniverseNodesFromStorage();
+    syncFavoriteUniverseSetFromNodes();
     state.universeMemberships = loadUniverseMembershipsFromStorage();
     loadVideosFromStorage();
     hydrateModelWithFallback();
