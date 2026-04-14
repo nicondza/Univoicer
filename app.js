@@ -2037,7 +2037,6 @@
         const childUniverseIds = new Set(Object.keys(state.universeMemberships || {}));
         const rootUniverseNodes = state.universeNodes.filter((node) => !childUniverseIds.has(node.id) || node.isFavorite === true);
         const rootUniverseNodeIds = new Set(rootUniverseNodes.map((node) => node.id));
-        const favoriteUniverseNodes = state.universeNodes.filter((node) => node.isFavorite && !rootUniverseNodeIds.has(node.id));
         const absorptionEffect = state.mapAbsorptionEffect;
         const absorptionMarkup = absorptionEffect
           ? `
@@ -2156,34 +2155,11 @@
           `;
         }).join('');
 
-        const favoriteCopiesMarkup = favoriteUniverseNodes.map((node, index) => {
-          const safeName = escapeHtml(node.name);
-          const copyX = 90 + ((index % 6) * 150);
-          const copyY = 90 + (Math.floor(index / 6) * 170);
-          return `
-            <button
-              class="universe-node universe-node--favorite-copy"
-              data-open="${safeName}"
-              title="Favorito: ${safeName}"
-              style="left:${copyX}px; top:${copyY}px;"
-            >
-              <div class="orb-container">
-                <img class="universe-cover" src="${getSafeUniverseCover(node.name, node.cover)}" alt="Favorito ${safeName}" loading="lazy">
-                <span class="cover-fallback">Sin portada</span>
-              </div>
-              <div class="node-info">
-                <h3>${safeName}</h3>
-              </div>
-            </button>
-          `;
-        }).join('');
-
         mapWorld.innerHTML = `
           <svg class="map-links-layer" id="mapLinksLayer" viewBox="0 0 ${state.mapCanvas.width} ${state.mapCanvas.height}" preserveAspectRatio="none" aria-hidden="true">
             ${worldLinks.join('')}
           </svg>
           ${absorptionMarkup}
-          ${favoriteCopiesMarkup}
           ${worldNodes.join('')}
           ${nodesMarkup}
         `;
@@ -2495,20 +2471,6 @@
             const worldName = worldEl.dataset.worldName;
             if (!worldName) return;
             state.universe = worldName;
-            state.selectedVideoId = null;
-            state.showAddForm = false;
-            state.showEditUniverseForm = false;
-            changeView('universe');
-            return;
-          }
-
-          const favoriteCopyEl = event.target.closest('.universe-node--favorite-copy[data-open]');
-          if (favoriteCopyEl) {
-            event.preventDefault();
-            event.stopPropagation();
-            const universeName = favoriteCopyEl.dataset.open;
-            if (!universeName) return;
-            state.universe = universeName;
             state.selectedVideoId = null;
             state.showAddForm = false;
             state.showEditUniverseForm = false;
