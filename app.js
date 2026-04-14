@@ -67,6 +67,7 @@
     const MARATHON_STORAGE_KEY = 'marathon_state_v1';
     const BLOCKED_CHARACTERS_STORAGE_KEY = 'blocked_characters_by_actor_v1';
     const UNIVERSE_MEMBERSHIPS_STORAGE_KEY = 'universe_memberships_v1';
+    const UNIVERSES_UPDATED_AT_KEY = 'universes_updated_at_v1';
     const CLOUD_STORAGE_PATH = 'univoicerData/main';
     const SPECIAL_UNASSIGNED_UNIVERSE = 'Sin universo';
     const MAX_LOCAL_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -170,13 +171,15 @@
               name: cleanName,
               allVideosCount: 0,
               unlockedVideosCount: 0,
-              charactersNames: new Set()
+              charactersNames: new Set(),
+              videos: []
             };
           }
-          
+
           // Incrementamos el total de videos de este universo
           acc[key].allVideosCount++;
-          
+          acc[key].videos.push(item);
+
           // Si tiene YouTube, es un video desbloqueado
           if (hasGreetingVideo(item)) {
             acc[key].unlockedVideosCount++;
@@ -204,7 +207,8 @@
             totalCharacters: totalCharacters, // <--- Este es el que va en "Personajes"
             unlockedVideos: unlockedVideos,   // <--- Este es el que va en "Video"
             completion,
-            state: completion === 100 ? 'complete' : (completion > 0 ? 'advanced' : 'incomplete')
+            state: completion === 100 ? 'complete' : (completion > 0 ? 'advanced' : 'incomplete'),
+            videos: data.videos
           }];
         })
       );
@@ -641,7 +645,13 @@
 
     function saveUniverseNodes() {
       localStorage.setItem(UNIVERSES_STORAGE_KEY, JSON.stringify(state.universeNodes));
+      localStorage.setItem(UNIVERSES_UPDATED_AT_KEY, String(Date.now()));
       scheduleCloudSync();
+    }
+
+    function getLocalUniversesUpdatedAt() {
+      const rawUpdatedAt = Number(localStorage.getItem(UNIVERSES_UPDATED_AT_KEY));
+      return Number.isFinite(rawUpdatedAt) ? rawUpdatedAt : 0;
     }
 
     function syncFavoriteUniverseSetFromNodes() {
@@ -971,7 +981,8 @@
             ...node,
             cover: node.cover || existing.cover || '',
             neighbors: [...new Set([...(existing.neighbors || []), ...(node.neighbors || [])])],
-            parentUniverseIds: [...new Set([...(existing.parentUniverseIds || []), ...(node.parentUniverseIds || [])])]
+            parentUniverseIds: [...new Set([...(existing.parentUniverseIds || []), ...(node.parentUniverseIds || [])])],
+            isFavorite: Boolean(existing.isFavorite || node.isFavorite)
           });
         });
       });
@@ -1155,15 +1166,16 @@
           return;
         }
 
-        if (data.universeNodes) {
+        const remoteUpdatedAt = Number(data.updatedAt) || 0;
+        const localUniversesUpdatedAt = getLocalUniversesUpdatedAt();
+
+        if (data.universeNodes && remoteUpdatedAt >= localUniversesUpdatedAt) {
           state.universeNodes = normalizeUniverseNodes(
             Object.entries(data.universeNodes).map(([id, val]) => ({ id, ...val }))
           );
-          state.favoriteUniverses = new Set(
-            state.universeNodes
-              .filter((node) => node.isFavorite)
-              .map((node) => node.name)
-          );
+          localStorage.setItem(UNIVERSES_STORAGE_KEY, JSON.stringify(state.universeNodes));
+          localStorage.setItem(UNIVERSES_UPDATED_AT_KEY, String(remoteUpdatedAt || Date.now()));
+          syncFavoriteUniverseSetFromNodes();
         }
         if (data.universeMemberships && typeof data.universeMemberships === 'object') {
           state.universeMemberships = normalizeUniverseMemberships(data.universeMemberships);
@@ -1232,22 +1244,29 @@
       return getFilteredUniverseVideos();
     }
 
+    async function flushCloudSync() {
+      if (!firebaseDb) return;
+      clearTimeout(cloudSyncTimer);
+      const updatedAt = Date.now();
+      try {
+        await firebaseDb.ref(CLOUD_STORAGE_PATH).set({
+          updatedAt,
+          universeNodes: state.universeNodes,
+          universeMemberships: state.universeMemberships,
+          videos: VIDEOS,
+          collectionModel,
+          blockedCharactersByActor: state.blockedCharactersByActor
+        });
+      } catch (err) {
+        console.warn('No se pudo guardar en Firebase.', err);
+      }
+    }
+
     function scheduleCloudSync() {
       if (!firebaseDb) return;
       clearTimeout(cloudSyncTimer);
-      cloudSyncTimer = setTimeout(async () => {
-        try {
-          await firebaseDb.ref(CLOUD_STORAGE_PATH).set({
-            updatedAt: Date.now(),
-            universeNodes: state.universeNodes,
-            universeMemberships: state.universeMemberships,
-            videos: VIDEOS,
-            collectionModel,
-            blockedCharactersByActor: state.blockedCharactersByActor
-          });
-        } catch (err) {
-          console.warn('No se pudo guardar en Firebase.', err);
-        }
+      cloudSyncTimer = setTimeout(() => {
+        flushCloudSync();
       }, 450);
     }
 
@@ -2016,8 +2035,9 @@
         const worldNodes = [];
         const worldLinks = [];
         const childUniverseIds = new Set(Object.keys(state.universeMemberships || {}));
-        const rootUniverseNodes = state.universeNodes.filter(node => !childUniverseIds.has(node.id));
-        const favoriteUniverseNodes = state.universeNodes.filter((node) => node.isFavorite);
+        const rootUniverseNodes = state.universeNodes.filter((node) => !childUniverseIds.has(node.id) || node.isFavorite === true);
+        const rootUniverseNodeIds = new Set(rootUniverseNodes.map((node) => node.id));
+        const favoriteUniverseNodes = state.universeNodes.filter((node) => node.isFavorite && !rootUniverseNodeIds.has(node.id));
         const absorptionEffect = state.mapAbsorptionEffect;
         const absorptionMarkup = absorptionEffect
           ? `
@@ -3215,6 +3235,7 @@
           currentNode.isFavorite = !currentNode.isFavorite;
           syncFavoriteUniverseSetFromNodes();
           saveUniverseNodes();
+          flushCloudSync();
 
           renderUniverseView();
           renderMapView();
@@ -4482,7 +4503,7 @@
 
     function ensureMarathonState() {
       const marathon = state.marathon;
-      const automaticQueue = getFilteredUniverseVideos();
+      const automaticQueue = VIDEOS.filter((video) => hasGreetingVideo(video));
       const byUniverse = groupByUniverse();
       const universePlaylists = Object.entries(byUniverse)
         .map(([key, data]) => ({
@@ -4504,8 +4525,7 @@
         {
           id: 'auto',
           name: 'Automática',
-          source: 'auto',
-          videos: automaticQueue.filter((video) => hasGreetingVideo(video))
+          videos: [...automaticQueue]
         },
         ...universePlaylists,
         ...customPlaylists
