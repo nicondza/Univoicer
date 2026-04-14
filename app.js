@@ -168,13 +168,15 @@
               name: cleanName,
               allVideosCount: 0,
               unlockedVideosCount: 0,
-              charactersNames: new Set()
+              charactersNames: new Set(),
+              videos: []
             };
           }
-          
+
           // Incrementamos el total de videos de este universo
           acc[key].allVideosCount++;
-          
+          acc[key].videos.push(item);
+
           // Si tiene YouTube, es un video desbloqueado
           if (hasGreetingVideo(item)) {
             acc[key].unlockedVideosCount++;
@@ -202,7 +204,8 @@
             totalCharacters: totalCharacters, // <--- Este es el que va en "Personajes"
             unlockedVideos: unlockedVideos,   // <--- Este es el que va en "Video"
             completion,
-            state: completion === 100 ? 'complete' : (completion > 0 ? 'advanced' : 'incomplete')
+            state: completion === 100 ? 'complete' : (completion > 0 ? 'advanced' : 'incomplete'),
+            videos: data.videos
           }];
         })
       );
