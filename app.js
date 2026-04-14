@@ -59,7 +59,8 @@
       expandedUniverses: new Set(),
       mapWorldFilter: 'universe',
       mapAbsorptionEffect: null,
-      favoriteUniverses: new Set()
+      favoriteUniverses: new Set(),
+      showInteruniversalConnections: false
     };
     const UNIVERSES_STORAGE_KEY = 'universes_map_v1';
     const VIDEOS_STORAGE_KEY = 'videos_collection_v1';
@@ -1700,8 +1701,9 @@
         viewMap.innerHTML = `
           <div class="universe-map-shell">
             <div class="map-toolbar">
-              <button type="button" id="mapToolBigBang" class="neon-btn map-tool-btn map-tool-btn--bigbang" data-map-tool="bigbang" aria-label="Herramienta Big Bang (arrastra al nodo)">💥 Explosión</button>
-              <button type="button" id="mapToolBlackhole" class="neon-btn map-tool-btn map-tool-btn--blackhole" data-map-tool="blackhole" aria-label="Herramienta Agujero negro (arrastra al nodo)">🕳️ Agujero negro</button>
+              <button type="button" id="mapToolBigBang" class="neon-btn map-tool-btn map-tool-btn--bigbang" data-map-tool="bigbang" aria-label="Herramienta Big Bang (arrastra al nodo)">💥</button>
+              <button type="button" id="mapToolBlackhole" class="neon-btn map-tool-btn map-tool-btn--blackhole" data-map-tool="blackhole" aria-label="Herramienta Agujero negro (arrastra al nodo)">🕳️</button>
+              <button type="button" id="mapToolInteruniversal" class="neon-btn map-tool-btn map-tool-btn--interuniversal ${state.showInteruniversalConnections ? 'is-active' : ''}" aria-label="Mostrar/ocultar conexiones interuniversales" aria-pressed="${state.showInteruniversalConnections ? 'true' : 'false'}">🌠</button>
             </div>
             <div id="universeMapCanvas" aria-label="Mapa de universos explorable">
               <div class="map-nebula-layer" aria-hidden="true"></div>
@@ -2087,7 +2089,9 @@
               `);
               const childNode = state.universeNodes.find((item) => item.id === entry.id);
               const parentUniverseIds = getParentUniverseIdsForNode(childNode);
-              const secondaryParentIds = parentUniverseIds.filter((parentId) => parentId !== node.id);
+              const secondaryParentIds = state.showInteruniversalConnections
+                ? parentUniverseIds.filter((parentId) => parentId !== node.id)
+                : [];
               secondaryParentIds.forEach((secondaryParentId, secondaryIndex) => {
                 const secondaryParent = state.universeNodes.find((item) => item.id === secondaryParentId);
                 if (!secondaryParent) return;
@@ -2284,6 +2288,14 @@
           const fallbackName = hostNode?.dataset.open || hostNode?.dataset.worldName || '';
           coverEl.src = getSafeUniverseCover(fallbackName, '');
         }, true);
+
+        viewMap.addEventListener('click', (event) => {
+          const interuniversalBtn = event.target.closest('#mapToolInteruniversal');
+          if (!interuniversalBtn) return;
+          event.preventDefault();
+          state.showInteruniversalConnections = !state.showInteruniversalConnections;
+          renderMapView({ rebuildWorld: true });
+        });
 
         viewMap.addEventListener('pointerdown', (event) => {
           const toolBtn = event.target.closest('[data-map-tool]');

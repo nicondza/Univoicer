@@ -797,8 +797,13 @@
     .map-tool-btn {
       position: relative;
       overflow: hidden;
-      padding: 8px 14px;
-      font-size: .85rem;
+      width: 46px;
+      height: 42px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      font-size: 1.2rem;
       border-radius: 12px;
       font-weight: 800;
       animation: mapToolPulse 1.8s ease-in-out infinite;
@@ -821,6 +826,16 @@
     .map-tool-btn--blackhole {
       box-shadow: 0 0 18px rgba(118, 96, 255, .42);
       border-color: rgba(165, 147, 255, .7);
+    }
+
+    .map-tool-btn--interuniversal {
+      box-shadow: 0 0 18px rgba(255, 102, 102, .35);
+      border-color: rgba(255, 138, 138, .6);
+    }
+    .map-tool-btn--interuniversal.is-active {
+      box-shadow: 0 0 24px rgba(255, 70, 70, .55);
+      border-color: rgba(255, 120, 120, .9);
+      background: linear-gradient(165deg, rgba(66, 20, 20, .94), rgba(120, 36, 36, .9));
     }
     .map-tool-token {
       position: fixed;
