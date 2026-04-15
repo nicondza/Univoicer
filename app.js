@@ -4963,15 +4963,6 @@
       const filteredActorSummaries = activeLetterFilter === 'top'
         ? (featuredActorSummaries.length ? featuredActorSummaries : actorSummaries.slice(0, 8))
         : actorSummaries.filter((item) => item.initial === activeLetterFilter);
-      // LÓGICA DE FILTRADO:
-      // 1) Dentro de cada grupo aplica OR:
-      //    - Estado actual (top/letra): "top" o una letra.
-      //    - Potencial: si hay varios potenciales activos, basta con coincidir en uno.
-      // 2) Entre grupos aplica AND:
-      //    - El actor debe pasar el filtro de estado actual Y el de potencial.
-      const filteredActorSummaries = filteredByCurrentState.filter((item) => (
-        !activePotentialFilters.length || activePotentialFilters.includes(item.potentialTier)
-      ));
       const visibleActorNames = filteredActorSummaries.map((item) => item.name);
       if (state.actorFocus && !visibleActorNames.includes(state.actorFocus)) {
         state.actorFocus = null;
@@ -5065,12 +5056,6 @@
               <button type="button" class="actor-alpha-btn ${activeLetterFilter === letter ? 'active' : ''}" data-actor-letter="${letter}">${letter}</button>
             `).join('')}
           </div>
-          <div class="actor-alpha-filter actor-potential-filter" aria-label="Filtro por potencial de actores">
-            <button type="button" class="actor-alpha-btn ${state.actorPotentialFilters?.platinable ? 'active' : ''}" data-actor-potential="platinable">Platinables</button>
-            <button type="button" class="actor-alpha-btn ${state.actorPotentialFilters?.consagrable ? 'active' : ''}" data-actor-potential="consagrable">Consagrables</button>
-            <button type="button" class="actor-alpha-btn ${state.actorPotentialFilters?.destacable ? 'active' : ''}" data-actor-potential="destacable">Destacables</button>
-            <button type="button" class="actor-alpha-btn ${state.actorPotentialFilters?.desbloqueable ? 'active' : ''}" data-actor-potential="desbloqueable">Desbloqueables</button>
-          </div>
 
           <form id="addActorForm" class="add-character-form mock-form-hidden">
             <label>Nombre del Actor
@@ -5112,7 +5097,6 @@
                   <p class="actor-card-meta">Personajes: ${item.totalCharactersCount}</p>
                   <p class="actor-card-meta">Desbloqueados: ${item.unlockedCharactersCount}</p>
                   <p class="actor-card-meta">Videos: ${item.videosCount}</p>
-                  <p class="actor-card-meta">Potencial: ${item.potentialLabel} (${item.totalCharactersCount})</p>
                 </div>
               </button>
               ${selectedActorRowEndIndex === idx ? actorInlineDetailMarkup : ''}
