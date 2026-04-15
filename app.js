@@ -24,6 +24,12 @@
       selectedVideoId: null,
       actorFocus: null,
       actorLetterFilter: 'top',
+      actorTierFilters: {
+        platinado: false,
+        consagrado: false,
+        destacado: false,
+        desbloqueado: false
+      },
       actorDetailsExpanded: false,
       actorRenameModalOpen: false,
       showAddForm: false,
@@ -4854,6 +4860,17 @@
     }
 
     function renderActoresView() {
+      const getActorTierFlags = (entries, unlockedVideosCount) => {
+        const totalEntries = entries.length;
+        const completion = totalEntries ? Math.round((unlockedVideosCount / totalEntries) * 100) : 0;
+        return {
+          platinado: totalEntries > 0 && completion === 100,
+          consagrado: completion >= 70,
+          destacado: completion >= 40,
+          desbloqueado: unlockedVideosCount > 0
+        };
+      };
+
       const ensureBlockedPlaceholderForActorCharacter = (actorName, characterName) => {
         const cleanActorName = String(actorName || '').trim();
         const cleanCharacterName = String(characterName || '').trim();
@@ -4932,6 +4949,13 @@
         || b.videosCount - a.videosCount
         || a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })
       ));
+
+      const activeTierFilterKeys = Object.entries(state.actorTierFilters || {})
+        .filter(([, isActive]) => Boolean(isActive))
+        .map(([key]) => key);
+      const actorSummariesByTier = activeTierFilterKeys.length
+        ? actorSummaries.filter((summary) => activeTierFilterKeys.some((tierKey) => summary.tierFlags?.[tierKey]))
+        : actorSummaries;
 
       const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
       const activeLetterFilter = state.actorLetterFilter || 'top';
@@ -5045,6 +5069,25 @@
             </div>
           </form>
 
+          <div class="actor-tier-filters" aria-label="Filtro por estado actual de actor">
+            <label class="actor-tier-filter-item">
+              <input type="checkbox" data-actor-tier-filter="platinado" ${state.actorTierFilters.platinado ? 'checked' : ''}>
+              <span>Platinado</span>
+            </label>
+            <label class="actor-tier-filter-item">
+              <input type="checkbox" data-actor-tier-filter="consagrado" ${state.actorTierFilters.consagrado ? 'checked' : ''}>
+              <span>Consagrado</span>
+            </label>
+            <label class="actor-tier-filter-item">
+              <input type="checkbox" data-actor-tier-filter="destacado" ${state.actorTierFilters.destacado ? 'checked' : ''}>
+              <span>Destacado</span>
+            </label>
+            <label class="actor-tier-filter-item">
+              <input type="checkbox" data-actor-tier-filter="desbloqueado" ${state.actorTierFilters.desbloqueado ? 'checked' : ''}>
+              <span>Desbloqueado</span>
+            </label>
+          </div>
+
           <div class="actor-gallery mock-gap-lg">
             ${filteredActorSummaries.map((item, idx) => `
               <button type="button" class="actor-card actor-card--tier-${item.tier.key} ${item.name === actor ? 'active' : ''}" data-actor-card="${item.name}">
@@ -5086,6 +5129,14 @@
           state.actorLetterFilter = next;
           state.actorFocus = null;
           state.actorDetailsExpanded = false;
+          renderActoresView();
+        });
+      });
+      viewActores.querySelectorAll('[data-actor-tier-filter]').forEach((input) => {
+        input.addEventListener('change', () => {
+          const filterKey = input.dataset.actorTierFilter;
+          if (!filterKey || !Object.prototype.hasOwnProperty.call(state.actorTierFilters, filterKey)) return;
+          state.actorTierFilters[filterKey] = Boolean(input.checked);
           renderActoresView();
         });
       });
