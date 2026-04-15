@@ -158,6 +158,14 @@
       return '#8cb8ff';
     }
 
+    function calculateActorTier({ entriesCount = 0, videosCount = 0, charactersCount = 0 } = {}) {
+      if (videosCount <= 0) return 'bloqueado';
+      if (entriesCount > 0 && videosCount === entriesCount && entriesCount >= 6) return 'platinado';
+      if (videosCount >= 10 || charactersCount >= 12) return 'consagrado';
+      if (videosCount >= 4 || charactersCount >= 6) return 'destacado';
+      return 'desbloqueado';
+    }
+
     function toEmbedUrl(url, autoplay = 0) {
       const id = getYoutubeId(url);
       return `https://www.youtube.com/embed/${id}?rel=0&modestbranding=1&autoplay=${autoplay}&enablejsapi=1`;
@@ -165,6 +173,24 @@
 
     function hasGreetingVideo(video) {
       return Boolean(getYoutubeId(video?.url_youtube || ''));
+    }
+
+    const ACTOR_PLATINADO_THRESHOLD = 6;
+    const ACTOR_TIERS = {
+      bloqueado: { key: 'bloqueado', label: 'Bloqueado', rank: 0 },
+      desbloqueado: { key: 'desbloqueado', label: 'Desbloqueado', rank: 1 },
+      destacado: { key: 'destacado', label: 'Destacado', rank: 2 },
+      consagrado: { key: 'consagrado', label: 'Consagrado', rank: 3 },
+      platinado: { key: 'platinado', label: 'Platinado', rank: 4 }
+    };
+
+    function getActorTier(unlockedCount) {
+      const safeUnlockedCount = Number(unlockedCount) || 0;
+      if (safeUnlockedCount > ACTOR_PLATINADO_THRESHOLD) return ACTOR_TIERS.platinado;
+      if (safeUnlockedCount === 4) return ACTOR_TIERS.consagrado;
+      if (safeUnlockedCount >= 2) return ACTOR_TIERS.destacado;
+      if (safeUnlockedCount === 1) return ACTOR_TIERS.desbloqueado;
+      return ACTOR_TIERS.bloqueado;
     }
 
     function groupByUniverse() {
@@ -4889,18 +4915,37 @@
       const actors = [...actorNameByNormalized.values()].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
       const actorSummaries = actors.map((name) => {
         const entries = VIDEOS.filter(v => (v.actor_de_doblaje || 'Sin actor') === name);
-        const videos = entries.filter(v => hasGreetingVideo(v));
-        const characters = [...new Set(entries.map(v => v.personaje || 'Sin personaje'))];
+        const blockedCharacters = state.blockedCharactersByActor[name] || [];
+        const unlockedCharactersSet = new Set(
+          entries
+            .filter(v => hasGreetingVideo(v))
+            .map(v => String(v.personaje || 'Sin personaje').trim())
+            .filter(Boolean)
+        );
+        const totalCharactersSet = new Set([
+          ...entries.map(v => String(v.personaje || 'Sin personaje').trim()).filter(Boolean),
+          ...blockedCharacters.map((characterName) => String(characterName || '').trim()).filter(Boolean)
+        ]);
+        const unlockedCharactersCount = unlockedCharactersSet.size;
+        const totalCharactersCount = totalCharactersSet.size;
+        const tier = getActorTier(unlockedCharactersCount);
         return {
           name,
           entries,
-          videosCount: videos.length,
-          charactersCount: characters.length,
+          videosCount: entries.filter(v => hasGreetingVideo(v)).length,
+          charactersCount: totalCharactersCount,
+          unlockedCharactersCount,
+          totalCharactersCount,
+          tier,
+          tierLabel: tier.label,
+          tierRank: tier.rank,
           initial: getActorInitialLetter(name),
-          tierFlags: getActorTierFlags(entries, videos.length)
+          isFeaturedTier: tier.rank >= ACTOR_TIERS.destacado.rank
         };
       }).sort((a, b) => (
-        b.charactersCount - a.charactersCount
+        b.tierRank - a.tierRank
+        || b.unlockedCharactersCount - a.unlockedCharactersCount
+        || b.charactersCount - a.charactersCount
         || b.videosCount - a.videosCount
         || a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })
       ));
@@ -4914,9 +4959,10 @@
 
       const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
       const activeLetterFilter = state.actorLetterFilter || 'top';
+      const featuredActorSummaries = actorSummaries.filter((item) => item.isFeaturedTier);
       const filteredActorSummaries = activeLetterFilter === 'top'
-        ? actorSummariesByTier.slice(0, 8)
-        : actorSummariesByTier.filter((item) => item.initial === activeLetterFilter);
+        ? (featuredActorSummaries.length ? featuredActorSummaries : actorSummaries.slice(0, 8))
+        : actorSummaries.filter((item) => item.initial === activeLetterFilter);
       const visibleActorNames = filteredActorSummaries.map((item) => item.name);
       if (state.actorFocus && !visibleActorNames.includes(state.actorFocus)) {
         state.actorFocus = null;
@@ -5044,10 +5090,12 @@
 
           <div class="actor-gallery mock-gap-lg">
             ${filteredActorSummaries.map((item, idx) => `
-              <button type="button" class="actor-card ${item.name === actor ? 'active' : ''}" data-actor-card="${item.name}">
+              <button type="button" class="actor-card actor-card--tier-${item.tier.key} ${item.name === actor ? 'active' : ''}" data-actor-card="${item.name}">
                 <h3 class="actor-card-title">${item.name}</h3>
+                <p class="actor-card-tier actor-card-tier--${item.tier.key}">${item.tierLabel}</p>
                 <div class="actor-card-footer">
-                  <p class="actor-card-meta">Personajes: ${item.charactersCount}</p>
+                  <p class="actor-card-meta">Personajes: ${item.totalCharactersCount}</p>
+                  <p class="actor-card-meta">Desbloqueados: ${item.unlockedCharactersCount}</p>
                   <p class="actor-card-meta">Videos: ${item.videosCount}</p>
                 </div>
               </button>
