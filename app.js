@@ -1056,6 +1056,7 @@
           primaryNode.parentUniverseId = node.parentUniverseId;
         }
         primaryNode.neighbors = [...new Set([...(primaryNode.neighbors || []), ...(node.neighbors || [])])];
+        primaryNode.isFavorite = Boolean(primaryNode.isFavorite || node.isFavorite);
       });
 
       if (!Object.keys(remappedNodeIds).length) {
