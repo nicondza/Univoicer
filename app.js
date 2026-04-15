@@ -152,6 +152,14 @@
       return '#8cb8ff';
     }
 
+    function calculateActorTier({ entriesCount = 0, videosCount = 0, charactersCount = 0 } = {}) {
+      if (videosCount <= 0) return 'bloqueado';
+      if (entriesCount > 0 && videosCount === entriesCount && entriesCount >= 6) return 'platinado';
+      if (videosCount >= 10 || charactersCount >= 12) return 'consagrado';
+      if (videosCount >= 4 || charactersCount >= 6) return 'destacado';
+      return 'desbloqueado';
+    }
+
     function toEmbedUrl(url, autoplay = 0) {
       const id = getYoutubeId(url);
       return `https://www.youtube.com/embed/${id}?rel=0&modestbranding=1&autoplay=${autoplay}&enablejsapi=1`;
@@ -4879,6 +4887,11 @@
           entries,
           videosCount: videos.length,
           charactersCount: characters.length,
+          tier: calculateActorTier({
+            entriesCount: entries.length,
+            videosCount: videos.length,
+            charactersCount: characters.length
+          }),
           initial: getActorInitialLetter(name)
         };
       }).sort((a, b) => (
@@ -5000,7 +5013,7 @@
 
           <div class="actor-gallery mock-gap-lg">
             ${filteredActorSummaries.map((item, idx) => `
-              <button type="button" class="actor-card ${item.name === actor ? 'active' : ''}" data-actor-card="${item.name}">
+              <button type="button" class="actor-card actor-card--${item.tier} ${item.name === actor ? 'active' : ''}" data-actor-card="${item.name}">
                 <h3 class="actor-card-title">${item.name}</h3>
                 <div class="actor-card-footer">
                   <p class="actor-card-meta">Personajes: ${item.charactersCount}</p>
