@@ -152,6 +152,14 @@
       return '#8cb8ff';
     }
 
+    function calculateActorTier({ entriesCount = 0, videosCount = 0, charactersCount = 0 } = {}) {
+      if (videosCount <= 0) return 'bloqueado';
+      if (entriesCount > 0 && videosCount === entriesCount && entriesCount >= 6) return 'platinado';
+      if (videosCount >= 10 || charactersCount >= 12) return 'consagrado';
+      if (videosCount >= 4 || charactersCount >= 6) return 'destacado';
+      return 'desbloqueado';
+    }
+
     function toEmbedUrl(url, autoplay = 0) {
       const id = getYoutubeId(url);
       return `https://www.youtube.com/embed/${id}?rel=0&modestbranding=1&autoplay=${autoplay}&enablejsapi=1`;
