@@ -1786,10 +1786,35 @@
         0 0 18px rgba(255, 188, 82, .36);
       filter: saturate(1.06) contrast(1.05);
     }
+    .actor-card-tier {
+      margin: 0;
+      display: inline-flex;
+      justify-self: center;
+      align-items: center;
+      border-radius: 999px;
+      padding: 3px 10px;
+      border: 1px solid rgba(177, 230, 255, .45);
+      background: rgba(14, 35, 68, .58);
+      color: #d7ecff;
+      font-size: .68rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      font-weight: 800;
+    }
+    .actor-card--tier-bloqueado .actor-card-tier { border-color: rgba(149, 170, 194, .5); color: #c5d5e6; }
+    .actor-card--tier-desbloqueado .actor-card-tier { border-color: rgba(133, 225, 179, .55); color: #b6f5d5; }
+    .actor-card--tier-destacado .actor-card-tier { border-color: rgba(119, 204, 255, .65); color: #b5e8ff; }
+    .actor-card--tier-consagrado .actor-card-tier { border-color: rgba(195, 154, 255, .68); color: #dfc8ff; }
+    .actor-card--tier-platinado .actor-card-tier {
+      border-color: rgba(255, 218, 118, .75);
+      color: #ffe8ad;
+      box-shadow: 0 0 14px rgba(255, 195, 92, .25);
+    }
     .actor-card-footer {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      flex-wrap: wrap;
       width: 100%;
       gap: 8px;
     }
@@ -1799,7 +1824,7 @@
       font-size: .74rem;
       font-weight: 700;
       letter-spacing: .02em;
-      white-space: nowrap;
+      white-space: normal;
     }
     .actor-inline-detail {
       grid-column: 1 / -1;
