@@ -24,6 +24,12 @@
       selectedVideoId: null,
       actorFocus: null,
       actorLetterFilter: 'top',
+      actorPotentialFilters: {
+        platinable: false,
+        consagrable: false,
+        destacable: false,
+        desbloqueable: false
+      },
       actorDetailsExpanded: false,
       actorRenameModalOpen: false,
       showAddForm: false,
@@ -4828,6 +4834,19 @@
     }
 
     function renderActoresView() {
+      const getActorPotentialTier = (totalCharactersCount) => {
+        const count = Number(totalCharactersCount) || 0;
+        if (count >= 12) return 'platinable';
+        if (count >= 8) return 'consagrable';
+        if (count >= 4) return 'destacable';
+        return 'desbloqueable';
+      };
+      const getActorPotentialLabel = (tier) => {
+        if (tier === 'platinable') return 'Platinable';
+        if (tier === 'consagrable') return 'Consagrable';
+        if (tier === 'destacable') return 'Destacable';
+        return 'Desbloqueable';
+      };
       const ensureBlockedPlaceholderForActorCharacter = (actorName, characterName) => {
         const cleanActorName = String(actorName || '').trim();
         const cleanCharacterName = String(characterName || '').trim();
@@ -4874,11 +4893,16 @@
         const entries = VIDEOS.filter(v => (v.actor_de_doblaje || 'Sin actor') === name);
         const videos = entries.filter(v => hasGreetingVideo(v));
         const characters = [...new Set(entries.map(v => v.personaje || 'Sin personaje'))];
+        const totalCharactersCount = Math.max(characters.length - videos.length, 0);
+        const potentialTier = getActorPotentialTier(totalCharactersCount);
         return {
           name,
           entries,
           videosCount: videos.length,
           charactersCount: characters.length,
+          totalCharactersCount,
+          potentialTier,
+          potentialLabel: getActorPotentialLabel(potentialTier),
           initial: getActorInitialLetter(name)
         };
       }).sort((a, b) => (
@@ -4889,9 +4913,21 @@
 
       const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
       const activeLetterFilter = state.actorLetterFilter || 'top';
-      const filteredActorSummaries = activeLetterFilter === 'top'
+      const activePotentialFilters = Object.entries(state.actorPotentialFilters || {})
+        .filter(([, enabled]) => Boolean(enabled))
+        .map(([tier]) => tier);
+      const filteredByCurrentState = activeLetterFilter === 'top'
         ? actorSummaries.slice(0, 8)
         : actorSummaries.filter((item) => item.initial === activeLetterFilter);
+      // LÓGICA DE FILTRADO:
+      // 1) Dentro de cada grupo aplica OR:
+      //    - Estado actual (top/letra): "top" o una letra.
+      //    - Potencial: si hay varios potenciales activos, basta con coincidir en uno.
+      // 2) Entre grupos aplica AND:
+      //    - El actor debe pasar el filtro de estado actual Y el de potencial.
+      const filteredActorSummaries = filteredByCurrentState.filter((item) => (
+        !activePotentialFilters.length || activePotentialFilters.includes(item.potentialTier)
+      ));
       const visibleActorNames = filteredActorSummaries.map((item) => item.name);
       if (state.actorFocus && !visibleActorNames.includes(state.actorFocus)) {
         state.actorFocus = null;
@@ -4985,6 +5021,12 @@
               <button type="button" class="actor-alpha-btn ${activeLetterFilter === letter ? 'active' : ''}" data-actor-letter="${letter}">${letter}</button>
             `).join('')}
           </div>
+          <div class="actor-alpha-filter actor-potential-filter" aria-label="Filtro por potencial de actores">
+            <button type="button" class="actor-alpha-btn ${state.actorPotentialFilters?.platinable ? 'active' : ''}" data-actor-potential="platinable">Platinables</button>
+            <button type="button" class="actor-alpha-btn ${state.actorPotentialFilters?.consagrable ? 'active' : ''}" data-actor-potential="consagrable">Consagrables</button>
+            <button type="button" class="actor-alpha-btn ${state.actorPotentialFilters?.destacable ? 'active' : ''}" data-actor-potential="destacable">Destacables</button>
+            <button type="button" class="actor-alpha-btn ${state.actorPotentialFilters?.desbloqueable ? 'active' : ''}" data-actor-potential="desbloqueable">Desbloqueables</button>
+          </div>
 
           <form id="addActorForm" class="add-character-form mock-form-hidden">
             <label>Nombre del Actor
@@ -5005,6 +5047,7 @@
                 <div class="actor-card-footer">
                   <p class="actor-card-meta">Personajes: ${item.charactersCount}</p>
                   <p class="actor-card-meta">Videos: ${item.videosCount}</p>
+                  <p class="actor-card-meta">Potencial: ${item.potentialLabel} (${item.totalCharactersCount})</p>
                 </div>
               </button>
               ${selectedActorRowEndIndex === idx ? actorInlineDetailMarkup : ''}
@@ -5035,6 +5078,16 @@
           const next = btn.dataset.actorLetter || 'top';
           if (state.actorLetterFilter === next) return;
           state.actorLetterFilter = next;
+          state.actorFocus = null;
+          state.actorDetailsExpanded = false;
+          renderActoresView();
+        });
+      });
+      viewActores.querySelectorAll('[data-actor-potential]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const tier = btn.dataset.actorPotential;
+          if (!tier || !Object.prototype.hasOwnProperty.call(state.actorPotentialFilters, tier)) return;
+          state.actorPotentialFilters[tier] = !state.actorPotentialFilters[tier];
           state.actorFocus = null;
           state.actorDetailsExpanded = false;
           renderActoresView();
